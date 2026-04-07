@@ -1,0 +1,58 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- script: |
+    curl -s https://packagecloud.io/install/repositories/loadimpact/k6/script.deb.sh | sudo bash
+    sudo apt-get install k6 -y
+  displayName: 'Instalar K6'
+
+- script: |
+    npm install -g k6-to-html
+  displayName: 'Instalar k6-to-html'
+
+- script: |
+    k6 run scripts/load.js --summary-export results.json
+  displayName: 'Ejecutar load.js'
+
+- powershell: |
+    if (!(Test-Path "results.json")) { 
+      Write-Error "❌ No se generó results.json"
+      exit 1
+    } else {
+      Write-Host "✅ results.json generado correctamente"
+    }
+  displayName: 'Validar results.json'
+
+- script: |
+    k6-to-html results.json -o report.html
+  displayName: 'Generar reporte HTML'
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: 'results.json'
+    ArtifactName: 'K6ResultsJSON'
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: 'report.html'
+    ArtifactName: 'K6ReportHTML'
+
+- powershell: |
+    $xmlContent = @"
+    <testsuites>
+      <testsuite name="K6 Load Test" tests="1" failures="0">
+        <testcase classname="K6" name="Load Test Execution"/>
+      </testsuite>
+    </testsuites>
+    "@
+    $xmlContent | Out-File -FilePath results.xml -Encoding utf8
+  displayName: 'Crear results.xml'
+
+- task: PublishTestResults@2
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: 'results.xml'
