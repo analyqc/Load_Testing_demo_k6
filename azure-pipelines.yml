@@ -1,58 +1,89 @@
 trigger:
-- main
+  - main
 
 pool:
   vmImage: 'ubuntu-latest'
 
 steps:
 
-# 1. Instalar Node.js
+# 1️⃣ Instalar Node.js (para convertir JSON a JUnit y generar HTML)
 - task: NodeTool@0
   inputs:
     versionSpec: '18.x'
   displayName: 'Instalar Node.js'
 
-# 2. Instalar K6
-- script: |
-    sudo apt update
-    sudo apt install -y gnupg software-properties-common curl
-    curl -s https://dl.k6.io/key.gpg | sudo apt-key add -
-    echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-    sudo apt update
-    sudo apt install -y k6
-    k6 version
-  displayName: 'Instalar K6'
+# 2️⃣ Instalar k6
+- task: Bash@3
+  displayName: 'Instalar k6'
+  inputs:
+    targetType: 'inline'
+    script: |
+      sudo apt update
+      sudo apt install -y gnupg software-properties-common curl
+      curl -s https://dl.k6.io/key.gpg | sudo apt-key add -
+      echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+      sudo apt update
+      sudo apt install -y k6
+      k6 version
 
-# 3. Crear carpeta para resultados
-- script: |
-    mkdir -p results
-  displayName: 'Crear carpeta results'
+# 3️⃣ Ejecutar todos los scripts K6 y generar JSON
+- task: Bash@3
+  displayName: 'Ejecutar scripts de K6 y generar JSON'
+  inputs:
+    targetType: 'inline'
+    script: |
+      mkdir -p results
+      for script in scripts/*.js; do
+        echo "Ejecutando $script..."
+        filename=$(basename "$script" .js)
+        k6 run "$script" --out json=results/$filename.json
+      done
 
-# 4. Ejecutar scripts K6 y generar JSON
-- script: |
-    echo "Ejecutando scripts K6..."
-    k6 run scripts/load.js --out json=results/load.json
-    k6 run scripts/smoke.js --out json=results/smoke.json
-  displayName: 'Ejecutar scripts K6 y generar JSON'
-
-# 5. Convertir JSON a XML estilo JUnit
-- script: |
-    echo "Convirtiendo JSON a XML para Azure..."
-    node -e "const fs = require('fs'); const path = require('path'); const scripts=['load','smoke']; scripts.forEach(s => { const jsonPath = path.join('results', s+'.json'); const xmlPath = path.join('results', s+'.xml'); if(fs.existsSync(jsonPath)){ const xml = \`<testsuites><testsuite name='\${s}' tests='1' failures='0'><testcase classname='k6' name='Test Execution'/></testsuite></testsuites>\`; fs.writeFileSync(xmlPath, xml); console.log('✅ ' + s + '.xml generado'); } });"
+# 4️⃣ Convertir JSON a JUnit XML para Test Plans
+- task: Bash@3
   displayName: 'Convertir JSON a JUnit XML'
+  inputs:
+    targetType: 'inline'
+    script: |
+      npm install -g junit-report-builder
+      mkdir -p results/xml
+      for jsonfile in results/*.json; do
+        name=$(basename "$jsonfile" .json)
+        node -e "
+          const fs = require('fs');
+          const junit = require('junit-report-builder');
+          const summary = JSON.parse(fs.readFileSync('$jsonfile'));
+          const suite = junit.testSuite().name('K6 Test: $name');
+          suite.testCase().className('K6').name('Requests').time(summary.metrics.http_reqs.duration.avg/1000);
+          junit.writeTo('results/xml/$name.xml');
+        "
+      done
 
-# 6. Publicar resultados en la pestaña Tests
+# 5️⃣ Generar HTML desde JSON
+- task: Bash@3
+  displayName: 'Generar HTML desde JSON'
+  inputs:
+    targetType: 'inline'
+    script: |
+      npm install -g k6-to-html
+      mkdir -p report
+      for jsonfile in results/*.json; do
+        name=$(basename "$jsonfile" .json)
+        npx k6-to-html "$jsonfile" -o report/$name.html
+      done
+
+# 6️⃣ Publicar Test Results en Azure Test Plans
 - task: PublishTestResults@2
+  displayName: 'Publicar resultados en Test Plans'
   inputs:
     testResultsFormat: 'JUnit'
-    testResultsFiles: 'results/*.xml'
-    failTaskOnFailedTests: false
-  displayName: 'Publicar resultados K6 en Azure'
+    testResultsFiles: 'results/xml/*.xml'
+    failTaskOnFailedTests: true
 
-# 7. Publicar JSON como artefacto
+# 7️⃣ Publicar reporte HTML como Artifact
 - task: PublishBuildArtifacts@1
+  displayName: 'Publicar reporte HTML'
   inputs:
-    PathtoPublish: 'results'
-    ArtifactName: 'K6Results'
+    PathtoPublish: 'report'
+    ArtifactName: 'K6Report'
     publishLocation: 'Container'
-  displayName: 'Publicar artefactos JSON de K6'
