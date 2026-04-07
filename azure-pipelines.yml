@@ -6,42 +6,41 @@ pool:
 
 steps:
 
-# 1️⃣ Instalar Node y k6
+# 1️⃣ Instalar Node (necesario para xk6-junit)
 - task: NodeTool@0
   inputs:
     versionSpec: '20.x'
   displayName: 'Instalar Node.js'
 
+# 2️⃣ Instalar Snap y K6
 - script: |
-    sudo apt-get update
-    sudo apt-get install -y gnupg software-properties-common
-    sudo apt-get install -y curl
-    # Instalar k6
-    sudo apt install -y k6
-  displayName: 'Instalar K6'
+    sudo apt update
+    sudo apt install -y snapd
+    sudo snap install k6
+    k6 version
+  displayName: 'Instalar K6 vía Snap'
 
-# 2️⃣ Instalar xk6-junit (para convertir JSON → XML)
+# 3️⃣ Instalar xk6-junit para convertir JSON -> XML
 - script: |
     npm install -g xk6-junit
+    xk6-junit --version
   displayName: 'Instalar xk6-junit'
 
-# 3️⃣ Ejecutar scripts de K6 y generar JSON
+# 4️⃣ Ejecutar scripts de K6 y generar JSON
 - script: |
     mkdir -p results
-    echo "Ejecutando scripts de K6..."
     k6 run scripts/load.js --out json=results/load.json
     k6 run scripts/smoke.js --out json=results/smoke.json
   displayName: 'Ejecutar scripts de K6 y generar JSON'
 
-# 4️⃣ Convertir JSON de K6 a JUnit XML
+# 5️⃣ Convertir JSON a JUnit XML
 - script: |
     mkdir -p results/xml
-    echo "Convertiendo JSON a JUnit XML..."
     xk6-junit convert results/load.json -o results/xml/load.xml
     xk6-junit convert results/smoke.json -o results/xml/smoke.xml
   displayName: 'Convertir JSON a JUnit XML'
 
-# 5️⃣ Generar reporte HTML con ReportGenerator
+# 6️⃣ Generar reporte HTML con ReportGenerator
 - task: ReportGenerator@5
   inputs:
     reports: 'results/xml/*.xml'
@@ -49,7 +48,7 @@ steps:
     reporttypes: 'Html;HtmlSummary'
   displayName: 'Generar reporte HTML visual'
 
-# 6️⃣ Publicar reporte como artifact
+# 7️⃣ Publicar reporte como artifact
 - task: PublishBuildArtifacts@1
   inputs:
     PathtoPublish: 'coveragereport'
@@ -57,7 +56,7 @@ steps:
     publishLocation: 'Container'
   displayName: 'Publicar reporte como Artifact'
 
-# 7️⃣ Publicar resultados de tests en Azure DevOps
+# 8️⃣ Publicar resultados de tests en Azure DevOps
 - task: PublishTestResults@2
   inputs:
     testResultsFormat: 'JUnit'
