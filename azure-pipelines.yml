@@ -6,7 +6,7 @@ pool:
 
 steps:
 
-# 1️⃣ Instalar K6 correctamente
+# 1️⃣ Instalar K6
 - script: |
     sudo apt-get update
     sudo apt-get install -y gnupg software-properties-common curl
@@ -16,37 +16,35 @@ steps:
     sudo apt-get install -y k6
   displayName: 'Instalar K6'
 
-# 2️⃣ Instalar k6-to-html (para generar HTML)
-- script: |
-    npm install -g k6-to-html
-  displayName: 'Instalar k6-to-html'
-
-# 3️⃣ Ejecutar todos los scripts de /scripts
+# 2️⃣ Ejecutar scripts de K6 y exportar JSON
 - script: |
     mkdir -p results
     for script in scripts/*.js; do
       filename=$(basename $script .js)
       echo "Ejecutando $script..."
+      # Ejecuta K6 y genera resultados en JSON
       k6 run $script --summary-export results/$filename.json
-      k6-to-html results/$filename.json -o results/${filename}_report.html
     done
-  displayName: 'Ejecutar scripts de K6 y generar HTML'
+  displayName: 'Ejecutar scripts de K6 y generar JSON'
 
-# 4️⃣ Publicar artifacts JSON
+# 3️⃣ Generar HTML desde JSON (usando k6 convert)
+- script: |
+    mkdir -p report
+    for jsonfile in results/*.json; do
+      filename=$(basename $jsonfile .json)
+      echo "Generando HTML para $jsonfile..."
+      k6 convert $jsonfile -o report/$filename.html
+    done
+  displayName: 'Convertir JSON a HTML'
+
+# 4️⃣ Publicar HTML como artifact
 - task: PublishBuildArtifacts@1
   inputs:
-    PathtoPublish: 'results'
-    ArtifactName: 'K6ResultsJSON'
-  displayName: 'Publicar resultados JSON'
-
-# 5️⃣ Publicar artifacts HTML
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: 'results'
+    PathtoPublish: 'report'
     ArtifactName: 'K6ReportHTML'
-  displayName: 'Publicar reportes HTML'
+  displayName: 'Publicar reporte HTML'
 
-# 6️⃣ Crear results.xml para pestaña Tests
+# 5️⃣ Crear results.xml para pestaña Tests
 - script: |
     cat <<EOF > results.xml
     <testsuites>
@@ -57,7 +55,7 @@ steps:
     EOF
   displayName: 'Crear results.xml'
 
-# 7️⃣ Publicar Test Results (JUnit)
+# 6️⃣ Publicar Test Results (JUnit)
 - task: PublishTestResults@2
   inputs:
     testResultsFormat: 'JUnit'
