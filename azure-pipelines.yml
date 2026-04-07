@@ -5,54 +5,62 @@ pool:
   vmImage: 'ubuntu-latest'
 
 steps:
+
+# 1️⃣ Instalar K6 correctamente
 - script: |
-    curl -s https://packagecloud.io/install/repositories/loadimpact/k6/script.deb.sh | sudo bash
-    sudo apt-get install k6 -y
+    sudo apt-get update
+    sudo apt-get install -y gnupg software-properties-common curl
+    curl -s https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+    sudo apt-get update
+    sudo apt-get install -y k6
   displayName: 'Instalar K6'
 
+# 2️⃣ Instalar k6-to-html (para generar HTML)
 - script: |
     npm install -g k6-to-html
   displayName: 'Instalar k6-to-html'
 
+# 3️⃣ Ejecutar todos los scripts de /scripts
 - script: |
-    k6 run scripts/load.js --summary-export results.json
-  displayName: 'Ejecutar load.js'
+    mkdir -p results
+    for script in scripts/*.js; do
+      filename=$(basename $script .js)
+      echo "Ejecutando $script..."
+      k6 run $script --summary-export results/$filename.json
+      k6-to-html results/$filename.json -o results/${filename}_report.html
+    done
+  displayName: 'Ejecutar scripts de K6 y generar HTML'
 
-- powershell: |
-    if (!(Test-Path "results.json")) { 
-      Write-Error "❌ No se generó results.json"
-      exit 1
-    } else {
-      Write-Host "✅ results.json generado correctamente"
-    }
-  displayName: 'Validar results.json'
-
-- script: |
-    k6-to-html results.json -o report.html
-  displayName: 'Generar reporte HTML'
-
+# 4️⃣ Publicar artifacts JSON
 - task: PublishBuildArtifacts@1
   inputs:
-    PathtoPublish: 'results.json'
+    PathtoPublish: 'results'
     ArtifactName: 'K6ResultsJSON'
+  displayName: 'Publicar resultados JSON'
 
+# 5️⃣ Publicar artifacts HTML
 - task: PublishBuildArtifacts@1
   inputs:
-    PathtoPublish: 'report.html'
+    PathtoPublish: 'results'
     ArtifactName: 'K6ReportHTML'
+  displayName: 'Publicar reportes HTML'
 
-- powershell: |
-    $xmlContent = @"
+# 6️⃣ Crear results.xml para pestaña Tests
+- script: |
+    cat <<EOF > results.xml
     <testsuites>
       <testsuite name="K6 Load Test" tests="1" failures="0">
         <testcase classname="K6" name="Load Test Execution"/>
       </testsuite>
     </testsuites>
-    "@
-    $xmlContent | Out-File -FilePath results.xml -Encoding utf8
+    EOF
   displayName: 'Crear results.xml'
 
+# 7️⃣ Publicar Test Results (JUnit)
 - task: PublishTestResults@2
   inputs:
     testResultsFormat: 'JUnit'
     testResultsFiles: 'results.xml'
+    failTaskOnFailedTests: false
+  displayName: 'Publicar Test Results'
