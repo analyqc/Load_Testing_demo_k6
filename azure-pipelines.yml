@@ -5,7 +5,6 @@ pool:
   vmImage: 'ubuntu-latest'
 
 steps:
-
 # 1️⃣ Instalar K6
 - script: |
     sudo apt-get update
@@ -16,35 +15,24 @@ steps:
     sudo apt-get install -y k6
   displayName: 'Instalar K6'
 
-# 2️⃣ Ejecutar scripts de K6 y exportar JSON
+# 2️⃣ Ejecutar scripts y exportar JSON
 - script: |
     mkdir -p results
-    for script in scripts/*.js; do
+    for script in "$BUILD_SOURCESDIRECTORY/scripts"/*.js; do
       filename=$(basename $script .js)
       echo "Ejecutando $script..."
-      # Ejecuta K6 y genera resultados en JSON
       k6 run $script --summary-export results/$filename.json
     done
   displayName: 'Ejecutar scripts de K6 y generar JSON'
 
-# 3️⃣ Generar HTML desde JSON (usando k6 convert)
-- script: |
-    mkdir -p report
-    for jsonfile in results/*.json; do
-      filename=$(basename $jsonfile .json)
-      echo "Generando HTML para $jsonfile..."
-      k6 convert $jsonfile -o report/$filename.html
-    done
-  displayName: 'Convertir JSON a HTML'
-
-# 4️⃣ Publicar HTML como artifact
+# 3️⃣ Publicar JSON como artifacts
 - task: PublishBuildArtifacts@1
   inputs:
-    PathtoPublish: 'report'
-    ArtifactName: 'K6ReportHTML'
-  displayName: 'Publicar reporte HTML'
+    PathtoPublish: 'results'
+    ArtifactName: 'K6ResultsJSON'
+  displayName: 'Publicar JSON como artifact'
 
-# 5️⃣ Crear results.xml para pestaña Tests
+# 4️⃣ Crear results.xml para pestaña Tests
 - script: |
     cat <<EOF > results.xml
     <testsuites>
@@ -55,7 +43,7 @@ steps:
     EOF
   displayName: 'Crear results.xml'
 
-# 6️⃣ Publicar Test Results (JUnit)
+# 5️⃣ Publicar Test Results (JUnit)
 - task: PublishTestResults@2
   inputs:
     testResultsFormat: 'JUnit'
