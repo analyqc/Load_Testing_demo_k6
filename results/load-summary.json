@@ -1,0 +1,6 @@
+{
+  "vusMax": 10,
+  "httpReqs": 842,
+  "failedRate": 0,
+  "p95Duration": 128.0011
+}

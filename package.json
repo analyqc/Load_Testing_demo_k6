@@ -1,0 +1,13 @@
+{
+  "name": "demo-k6",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Proyecto de pruebas de carga con Grafana k6",
+  "scripts": {
+    "smoke": "tools\\run-k6.cmd run scripts/smoke.js",
+    "load": "tools\\run-k6.cmd run scripts/load.js",
+    "smoke:custom": "tools\\run-k6.cmd run -e TARGET_URL=https://jsonplaceholder.typicode.com/posts/2 scripts/smoke.js",
+    "smoke:summary": "tools\\run-k6.cmd run --summary-export=results/smoke-summary.json scripts/smoke.js",
+    "load:summary": "tools\\run-k6.cmd run --summary-export=results/load-summary-export.json scripts/load.js"
+  }
+}
